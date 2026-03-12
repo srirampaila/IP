@@ -3,6 +3,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Login.css';
 
+interface LoginErrors {
+    email: string;
+    password: string;
+}
+
 const Login = () => {
     const navigate = useNavigate();
     const [formData, setFormData] = useState({
@@ -10,17 +15,17 @@ const Login = () => {
         password: ''
     });
 
-    const [errors, setErrors] = useState({
+    const [errors, setErrors] = useState<LoginErrors>({
         email: '',
         password: ''
     });
 
-    const validateEmail = (email) => {
+    const validateEmail = (email: string) => {
         const re = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
         return re.test(String(email).toLowerCase());
     };
 
-    const handleChange = (e) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({
             ...prev,
@@ -28,7 +33,7 @@ const Login = () => {
         }));
 
         // Clear error on change if valid
-        if (errors[name]) {
+        if (errors[name as keyof LoginErrors]) {
             setErrors(prev => ({
                 ...prev,
                 [name]: ''
@@ -36,9 +41,9 @@ const Login = () => {
         }
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const newErrors = {};
+        const newErrors: LoginErrors = { email: '', password: '' };
 
         // Email Validation
         if (!formData.email) {
@@ -56,10 +61,9 @@ const Login = () => {
 
         setErrors(newErrors);
 
-        if (Object.keys(newErrors).length === 0) {
+        if (!newErrors.email && !newErrors.password) {
             // Form is valid
             console.log('Login successful', formData);
-            // alert('Login Successful! Welcome back.');
             navigate('/dashboard');
         }
     };

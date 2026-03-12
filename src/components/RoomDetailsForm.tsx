@@ -1,37 +1,74 @@
 import { useState } from 'react';
 
-const RoomDetailsForm = () => {
+interface RoomErrors {
+    roomNumber?: string;
+    roomType?: string;
+    capacity?: string;
+}
+
+interface RoomDetailsFormProps {
+    onSubmitSuccess?: (submittedAt: number) => void;
+}
+
+const RoomDetailsForm = ({ onSubmitSuccess }: RoomDetailsFormProps) => {
     const [formData, setFormData] = useState({
         roomNumber: '',
         roomType: '',
         capacity: ''
     });
-    const [errors, setErrors] = useState({});
+    const [errors, setErrors] = useState<RoomErrors>({});
+    const [submitting, setSubmitting] = useState(false);
+    const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-    const handleChange = (e) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
-        if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+        if (errors[name as keyof RoomErrors]) setErrors(prev => ({ ...prev, [name]: '' }));
     };
 
-    const validate = () => {
-        const newErrors = {};
+    const validate = (): RoomErrors => {
+        const newErrors: RoomErrors = {};
         if (!formData.roomNumber) newErrors.roomNumber = 'Room Number is required';
         if (!formData.roomType) newErrors.roomType = 'Room Type is required';
         if (!formData.capacity) newErrors.capacity = 'Capacity is required';
-        else if (isNaN(formData.capacity) || Number(formData.capacity) <= 0) newErrors.capacity = 'Capacity must be a positive number';
+        else if (isNaN(Number(formData.capacity)) || Number(formData.capacity) <= 0) newErrors.capacity = 'Capacity must be a positive number';
         return newErrors;
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const newErrors = validate();
-        if (Object.keys(newErrors).length === 0) {
-            console.log('Room Details Submitted:', formData);
-            alert('Room Details Submitted Successfully');
-            setFormData({ roomNumber: '', roomType: '', capacity: '' });
-        } else {
+        if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors);
+            return;
+        }
+
+        const submittedAt = Date.now();
+        setSubmitting(true);
+        setSubmitStatus('idle');
+
+        try {
+            const response = await fetch('http://localhost:3001/api/rooms', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-demo-bypass': 'true'
+                },
+                body: JSON.stringify({ roomNumber: formData.roomNumber, roomType: formData.roomType })
+            });
+
+            if (!response.ok) throw new Error('Server error');
+
+            setSubmitStatus('success');
+            setFormData({ roomNumber: '', roomType: '', capacity: '' });
+            onSubmitSuccess?.(submittedAt);
+
+            setTimeout(() => setSubmitStatus('idle'), 3000);
+        } catch (err) {
+            console.error('Failed to submit room details:', err);
+            setSubmitStatus('error');
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -41,6 +78,16 @@ const RoomDetailsForm = () => {
                 <h5 className="mb-0">Room Details Entry</h5>
             </div>
             <div className="card-body">
+                {submitStatus === 'success' && (
+                    <div className="alert alert-success py-2 mb-3">
+                        ✅ Room saved! Dashboard updating…
+                    </div>
+                )}
+                {submitStatus === 'error' && (
+                    <div className="alert alert-danger py-2 mb-3">
+                        ❌ Submission failed. Check the server.
+                    </div>
+                )}
                 <form onSubmit={handleSubmit} noValidate>
                     <div className="mb-3">
                         <label htmlFor="roomNumber" className="form-label">Room Number</label>
@@ -86,7 +133,13 @@ const RoomDetailsForm = () => {
                         />
                         {errors.capacity && <div className="invalid-feedback">{errors.capacity}</div>}
                     </div>
-                    <button type="submit" className="btn btn-primary w-100">Submit Room Details</button>
+                    <button
+                        type="submit"
+                        className="btn btn-primary w-100"
+                        disabled={submitting}
+                    >
+                        {submitting ? 'Submitting…' : 'Submit Room Details'}
+                    </button>
                 </form>
             </div>
         </div>

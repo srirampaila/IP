@@ -4,9 +4,11 @@
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  width: 100vw;
+  width: 100%;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  padding: 1rem;
+  /* Prevent edge-to-edge on mobile */
 }
 
 .login-card {
@@ -27,7 +29,7 @@
   font-size: 2rem;
   font-weight: 700;
   color: #fff;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .login-form {
@@ -80,8 +82,15 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .login-button {
@@ -104,4 +113,10 @@
 
 .login-button:active {
   transform: translateY(0);
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 2rem;
+  }
 }

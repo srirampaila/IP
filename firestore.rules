@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Existing collections
+    match /maintenanceLogs/{docId} { allow read, write: if true; }
+    match /energyLogs/{docId} { allow read, write: if true; }
+    match /roomStatus/{docId} { allow read, write: if true; }
+    match /visitorLogs/{docId} { allow read, write: if true; }
+    match /users/{userId} { allow read: if true; }
+
+    // New Social Hub Posts rules
+    match /posts/{postId} {
+      // Anyone can read public. Private can only be read by author or recipient.
+      allow read: if resource.data.type == 'public' || 
+                     request.auth.uid == resource.data.authorId || 
+                     request.auth.uid == resource.data.recipientId;
+      
+      // Allow creation
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.authorId;
+      
+      // Allow author to update
+      allow update: if request.auth.uid == resource.data.authorId;
+      // Allow updating likesCount
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount']);
+      
+      match /likes/{userId} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      match /comments/{commentId} {
+        // Inherit read rules from parent post
+        allow read: if get(/databases/$(database)/documents/posts/$(postId)).data.type == 'public' ||
+                       request.auth.uid == get(/databases/$(database)/documents/posts/$(postId)).data.authorId ||
+                       request.auth.uid == get(/databases/$(database)/documents/posts/$(postId)).data.recipientId;
+                       
+        allow create: if request.auth != null && request.auth.uid == request.resource.data.authorId;
+      }
+    }
+  }
+}

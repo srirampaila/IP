@@ -1,9 +1,22 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+interface MaintenanceLog {
+    id: string;
+    room: string;
+    description: string;
+    priority: string;
+    status: string;
+    date: string;
+}
+
+type PriorityOrder = {
+    [key: string]: number;
+};
+
 const MaintenanceLogs = () => {
     const navigate = useNavigate();
-    const [logs, setLogs] = useState([]);
+    const [logs, setLogs] = useState<MaintenanceLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortOption, setSortOption] = useState('latest');
@@ -44,8 +57,8 @@ const MaintenanceLogs = () => {
             } else if (sortOption === 'status') {
                 return (a.status || '').localeCompare(b.status || '');
             } else if (sortOption === 'priority') {
-                const priorityOrder = { 'Urgent': 0, 'High': 1, 'Medium': 2, 'Low': 3 };
-                return (priorityOrder[a.priority] || 99) - (priorityOrder[b.priority] || 99);
+                const priorityOrder: PriorityOrder = { 'Urgent': 0, 'High': 1, 'Medium': 2, 'Low': 3 };
+                return (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99);
             }
             return 0;
         });
@@ -120,7 +133,7 @@ const MaintenanceLogs = () => {
                                         </thead>
                                         <tbody>
                                             {loading ? (
-                                                <tr><td colSpan="6" className="text-center py-4">Loading...</td></tr>
+                                                <tr><td colSpan={6} className="text-center py-4">Loading...</td></tr>
                                             ) : filteredLogs.length > 0 ? (
                                                 filteredLogs.map((item, index) => (
                                                     <tr key={index}>
@@ -133,7 +146,7 @@ const MaintenanceLogs = () => {
                                                     </tr>
                                                 ))
                                             ) : (
-                                                <tr><td colSpan="6" className="text-center py-4">No logs found</td></tr>
+                                                <tr><td colSpan={6} className="text-center py-4">No logs found</td></tr>
                                             )}
                                         </tbody>
                                     </table>

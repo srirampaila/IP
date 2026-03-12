@@ -1,0 +1,258 @@
+/* Dashboard Premium Styles */
+
+/* Modern Card Styling */
+.card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    /* Soft, premium shadow */
+    background-color: #ffffff;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+    /* Ensure headers don't overflow rounded corners */
+}
+
+/* Hover effect for interactive cards */
+.card:hover {
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+}
+
+/* Refined Card Headers */
+.card-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    background-color: #fff !important;
+    /* Override bootstrap colors for cleaner look, use text color for meaning */
+    padding: 1.25rem 1.5rem;
+    font-weight: 600;
+}
+
+/* Custom text colors for headers to replace bg colors if preferred,
+   or keep bg colors but make them softer. Let's try softer bg colors for premium feel */
+.bg-primary {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
+    border: none;
+}
+
+.bg-danger {
+    background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%) !important;
+    /* Or a more solid red gradient */
+    background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%) !important;
+    border: none;
+}
+
+.bg-success {
+    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%) !important;
+    border: none;
+}
+
+.bg-info {
+    background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%) !important;
+    border: none;
+}
+
+.bg-dark {
+    background-color: #1e1e2f !important;
+    /* Dark blue-grey instead of pure black */
+}
+
+/* Table Enhancements */
+.table {
+    margin-bottom: 0;
+}
+
+.table thead th {
+    border-bottom: none;
+    color: #6c757d;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+    background-color: #f8f9fa;
+    padding: 1rem;
+}
+
+.table tbody td {
+    padding: 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.95rem;
+    color: #333;
+}
+
+.table-hover tbody tr:hover {
+    background-color: #fafafa;
+}
+
+/* Tabs Styling */
+.nav-tabs {
+    border-bottom: 2px solid #e9ecef;
+    margin-bottom: 1.5rem;
+}
+
+.nav-tabs .nav-link {
+    border: none;
+    color: #6c757d;
+    font-weight: 500;
+    padding: 0.75rem 1.5rem;
+    transition: all 0.2s;
+    background: transparent;
+}
+
+.nav-tabs .nav-link:hover {
+    color: #495057;
+    border: none;
+}
+
+.nav-tabs .nav-link.active {
+    color: #212529;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid #667eea;
+}
+
+/* input and select styling */
+.form-control,
+.form-select {
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    padding: 0.75rem 1rem;
+    box-shadow: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #aebcff;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+}
+
+/* Badges */
+.badge {
+    padding: 0.5em 0.8em;
+    border-radius: 6px;
+    font-weight: 500;
+    font-size: 0.85em;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+/* Buttons */
+.btn {
+    border-radius: 8px;
+    padding: 0.6rem 1.25rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    border: none;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    box-shadow: 0 4px 15px rgba(118, 75, 162, 0.2);
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(118, 75, 162, 0.3);
+}
+
+/* Navbar Brand */
+.navbar-brand {
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    font-size: 1.3rem;
+    background: linear-gradient(to right, #fff, #aebcff);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.navbar .btn-outline-light {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.navbar .btn-outline-light:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #fff;
+}
+
+/* ── Live Status Bar ── */
+.status-bar {
+    border-left: 4px solid #28a745;
+    border-radius: 10px !important;
+    background: linear-gradient(135deg, #f0fff4 0%, #ffffff 100%);
+}
+
+/* LIVE badge with animated pulsing dot */
+.live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: #28a745;
+    text-transform: uppercase;
+    background: rgba(40, 167, 69, 0.08);
+    border: 1px solid rgba(40, 167, 69, 0.25);
+    border-radius: 20px;
+    padding: 3px 10px 3px 6px;
+}
+
+.live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #28a745;
+    animation: livePulse 1.4s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
+@keyframes livePulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.5);
+    }
+
+    50% {
+        transform: scale(1.2);
+        opacity: 0.9;
+        box-shadow: 0 0 0 5px rgba(40, 167, 69, 0);
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
+    }
+}
+
+/* Latency badge */
+.latency-badge {
+    background: rgba(40, 167, 69, 0.06);
+    border: 1px solid rgba(40, 167, 69, 0.2);
+    border-radius: 6px;
+    padding: 1px 8px;
+}
+
+/* ── Row flash animation for newly added rows ── */
+@keyframes rowFlash {
+    0% {
+        background-color: #fff9c4;
+    }
+
+    30% {
+        background-color: #fffde0;
+    }
+
+    100% {
+        background-color: transparent;
+    }
+}
+
+.row-flash {
+    animation: rowFlash 2.5s ease-out forwards;
+}
