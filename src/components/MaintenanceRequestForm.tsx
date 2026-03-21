@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { db } from '../firebase';
+import { collection, addDoc } from 'firebase/firestore';
+
 
 interface MaintenanceErrors {
     roomId?: string;
@@ -8,14 +11,21 @@ interface MaintenanceErrors {
 
 interface MaintenanceRequestFormProps {
     onSubmitSuccess?: (submittedAt: number) => void;
+    userProfile?: any;
 }
 
-const MaintenanceRequestForm = ({ onSubmitSuccess }: MaintenanceRequestFormProps) => {
+const MaintenanceRequestForm = ({ onSubmitSuccess, userProfile }: MaintenanceRequestFormProps) => {
     const [formData, setFormData] = useState({
         roomId: '',
         description: '',
         priority: ''
     });
+
+    useEffect(() => {
+        if (userProfile?.roomId && !formData.roomId) {
+            setFormData(prev => ({ ...prev, roomId: userProfile.roomId }));
+        }
+    }, [userProfile?.roomId]);
     const [errors, setErrors] = useState<MaintenanceErrors>({});
     const [submitting, setSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -29,6 +39,8 @@ const MaintenanceRequestForm = ({ onSubmitSuccess }: MaintenanceRequestFormProps
     const validate = (): MaintenanceErrors => {
         const newErrors: MaintenanceErrors = {};
         if (!formData.roomId) newErrors.roomId = 'Room ID is required';
+        else if (!/^\d+$/.test(formData.roomId)) newErrors.roomId = 'Room ID must be a valid number';
+        
         if (!formData.description) newErrors.description = 'Description is required';
         if (!formData.priority) newErrors.priority = 'Priority is required';
         return newErrors;
@@ -47,16 +59,14 @@ const MaintenanceRequestForm = ({ onSubmitSuccess }: MaintenanceRequestFormProps
         setSubmitStatus('idle');
 
         try {
-            const response = await fetch('http://localhost:3001/api/maintenance', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-demo-bypass': 'true'
-                },
-                body: JSON.stringify(formData)
+            await addDoc(collection(db, 'maintenanceLogs'), {
+                room: formData.roomId,
+                description: formData.description,
+                priority: formData.priority,
+                status: 'Pending',
+                date: new Date().toISOString().split('T')[0],
+                receivedAt: new Date().toISOString()
             });
-
-            if (!response.ok) throw new Error('Server error');
 
             setSubmitStatus('success');
             setFormData({ roomId: '', description: '', priority: '' });
@@ -95,6 +105,7 @@ const MaintenanceRequestForm = ({ onSubmitSuccess }: MaintenanceRequestFormProps
                             className={`form-control ${errors.roomId ? 'is-invalid' : ''}`}
                             id="mRoomId"
                             name="roomId"
+                            placeholder="e.g. 101"
                             value={formData.roomId}
                             onChange={handleChange}
                             required

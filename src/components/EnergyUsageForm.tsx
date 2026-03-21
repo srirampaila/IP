@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { db } from '../firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
 interface EnergyErrors {
     roomId?: string;
@@ -8,14 +10,21 @@ interface EnergyErrors {
 
 interface EnergyUsageFormProps {
     onSubmitSuccess?: (submittedAt: number) => void;
+    userProfile?: any;
 }
 
-const EnergyUsageForm = ({ onSubmitSuccess }: EnergyUsageFormProps) => {
+const EnergyUsageForm = ({ onSubmitSuccess, userProfile }: EnergyUsageFormProps) => {
     const [formData, setFormData] = useState({
         roomId: '',
         usageValue: '',
         date: ''
     });
+
+    useEffect(() => {
+        if (userProfile?.roomId && !formData.roomId) {
+            setFormData(prev => ({ ...prev, roomId: userProfile.roomId }));
+        }
+    }, [userProfile?.roomId]);
     const [errors, setErrors] = useState<EnergyErrors>({});
     const [submitting, setSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -29,6 +38,8 @@ const EnergyUsageForm = ({ onSubmitSuccess }: EnergyUsageFormProps) => {
     const validate = (): EnergyErrors => {
         const newErrors: EnergyErrors = {};
         if (!formData.roomId) newErrors.roomId = 'Room ID is required';
+        else if (!/^\d+$/.test(formData.roomId)) newErrors.roomId = 'Room ID must be a valid number';
+
         if (!formData.usageValue) newErrors.usageValue = 'Usage Value is required';
         else if (isNaN(Number(formData.usageValue)) || Number(formData.usageValue) < 0 || Number(formData.usageValue) > 1000) {
             newErrors.usageValue = 'Usage must be between 0 and 1000 kWh';
@@ -50,16 +61,13 @@ const EnergyUsageForm = ({ onSubmitSuccess }: EnergyUsageFormProps) => {
         setSubmitStatus('idle');
 
         try {
-            const response = await fetch('http://localhost:3001/api/energy', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-demo-bypass': 'true'
-                },
-                body: JSON.stringify(formData)
+            await addDoc(collection(db, 'energyLogs'), {
+                room: formData.roomId,
+                usage: parseFloat(formData.usageValue),
+                unit: 'kWh',
+                date: formData.date,
+                receivedAt: new Date().toISOString()
             });
-
-            if (!response.ok) throw new Error('Server error');
 
             setSubmitStatus('success');
             setFormData({ roomId: '', usageValue: '', date: '' });
@@ -98,6 +106,7 @@ const EnergyUsageForm = ({ onSubmitSuccess }: EnergyUsageFormProps) => {
                             className={`form-control ${errors.roomId ? 'is-invalid' : ''}`}
                             id="roomId"
                             name="roomId"
+                            placeholder="e.g. 101"
                             value={formData.roomId}
                             onChange={handleChange}
                             required

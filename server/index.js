@@ -1,24 +1,32 @@
 import express from 'express';
 import cors from 'cors';
-import { initializeApp, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
-import fs from 'fs';
+import crypto from 'crypto';
 
-// --- Initialize Firebase Setup ---
-const serviceAccountPath = new URL('./firebaseServiceAccountKey.json', import.meta.url);
-const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
-
-initializeApp({
-    credential: cert(serviceAccount)
-});
-
-const db = getFirestore();
 const app = express();
 const PORT = 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// --- In-Memory Database ---
+const db = {
+    maintenanceLogs: [],
+    energyLogs: [],
+    roomStatus: [],
+    visitorLogs: []
+};
+
+// Seed some initial data
+db.maintenanceLogs.push({ 
+    id: crypto.randomUUID(), 
+    room: '101', 
+    description: 'Leaking faucet in bathroom', 
+    priority: 'Medium', 
+    status: 'Pending', 
+    date: new Date().toISOString().split('T')[0], 
+    receivedAt: new Date().toISOString(), 
+    isNew: false 
+});
 
 // --- Centralized Error Formatter ---
 const sendError = (res, statusCode, message, details = null) => {
@@ -29,84 +37,30 @@ const sendError = (res, statusCode, message, details = null) => {
 
 // --- Authentication Middleware ---
 const verifyToken = async (req, res, next) => {
-    // For demo purposes, we will bypass this if a specific header is sent, 
-    // or you can strictly enforce it by removing the bypass.
+    // For demo purposes, we will bypass this if a specific header is sent
     if (req.headers['x-demo-bypass'] === 'true') {
         return next();
     }
-
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return sendError(res, 401, 'Unauthorized: Missing or invalid Authorization header');
-    }
-
-    const idToken = authHeader.split('Bearer ')[1];
-    try {
-        const decodedToken = await getAuth().verifyIdToken(idToken);
-        req.user = decodedToken;
-        next();
-    } catch (error) {
-        console.error('Error verifying Firebase token:', error);
-        return sendError(res, 403, 'Forbidden: Invalid token');
-    }
+    return sendError(res, 401, 'Unauthorized: Missing bypass header for in-memory db');
 };
 
 // --- GET /api/updates : returns all data + server timestamp ---
 app.get('/api/updates', async (req, res) => {
     try {
-        const maintenanceDocs = await db.collection('maintenanceLogs').orderBy('receivedAt', 'desc').get();
-        const maintenanceLogs = maintenanceDocs.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        const energyDocs = await db.collection('energyLogs').orderBy('receivedAt', 'desc').get();
-        const energyLogs = energyDocs.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        const roomDocs = await db.collection('roomStatus').orderBy('receivedAt', 'desc').get();
-        const roomStatus = roomDocs.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        const visitorDocs = await db.collection('visitorLogs').orderBy('entryTime', 'desc').get();
-        const visitorLogs = visitorDocs.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
         const responseData = {
             serverTime: new Date().toISOString(),
             systemStatus: 'Operational',
-            maintenanceLogs,
-            energyLogs,
-            roomStatus,
-            visitorLogs
+            maintenanceLogs: [...db.maintenanceLogs].sort((a,b) => new Date(b.receivedAt) - new Date(a.receivedAt)),
+            energyLogs: [...db.energyLogs].sort((a,b) => new Date(b.receivedAt) - new Date(a.receivedAt)),
+            roomStatus: [...db.roomStatus].sort((a,b) => new Date(b.receivedAt) - new Date(a.receivedAt)),
+            visitorLogs: [...db.visitorLogs].sort((a,b) => new Date(b.entryTime) - new Date(a.entryTime))
         };
 
         // Clear 'isNew' flag after reading it
-        const batch = db.batch();
-        let needsUpdate = false;
-
-        maintenanceDocs.docs.forEach(doc => {
-            if (doc.data().isNew) {
-                batch.update(doc.ref, { isNew: false });
-                needsUpdate = true;
-            }
-        });
-        energyDocs.docs.forEach(doc => {
-            if (doc.data().isNew) {
-                batch.update(doc.ref, { isNew: false });
-                needsUpdate = true;
-            }
-        });
-        roomDocs.docs.forEach(doc => {
-            if (doc.data().isNew) {
-                batch.update(doc.ref, { isNew: false });
-                needsUpdate = true;
-            }
-        });
-        visitorDocs.docs.forEach(doc => {
-            if (doc.data().isNew) {
-                batch.update(doc.ref, { isNew: false });
-                needsUpdate = true;
-            }
-        });
-
-        if (needsUpdate) {
-            await batch.commit();
-        }
+        db.maintenanceLogs.forEach(log => log.isNew = false);
+        db.energyLogs.forEach(log => log.isNew = false);
+        db.roomStatus.forEach(log => log.isNew = false);
+        db.visitorLogs.forEach(log => log.isNew = false);
 
         res.json(responseData);
     } catch (e) {
@@ -130,7 +84,9 @@ app.post('/api/maintenance', verifyToken, async (req, res) => {
     if (!priority || !['Low', 'Medium', 'High', 'Urgent'].includes(priority)) {
         return sendError(res, 400, 'Invalid priority. Must be Low, Medium, High, or Urgent');
     }
+    
     const newLog = {
+        id: crypto.randomUUID(),
         room: roomId,
         description,
         priority,
@@ -139,9 +95,10 @@ app.post('/api/maintenance', verifyToken, async (req, res) => {
         receivedAt: new Date().toISOString(),
         isNew: true
     };
+    
     try {
-        const docRef = await db.collection('maintenanceLogs').add(newLog);
-        res.status(201).json({ success: true, record: { id: docRef.id, ...newLog }, serverTime: newLog.receivedAt });
+        db.maintenanceLogs.push(newLog);
+        res.status(201).json({ success: true, record: newLog, serverTime: newLog.receivedAt });
     } catch (error) {
         console.error('Error adding maintenance log:', error);
         return sendError(res, 500, 'Failed to add maintenance log', error.message);
@@ -158,14 +115,12 @@ app.put('/api/maintenance/:id', verifyToken, async (req, res) => {
     }
 
     try {
-        const docRef = db.collection('maintenanceLogs').doc(id);
-        const docSnap = await docRef.get();
-
-        if (!docSnap.exists) {
+        const index = db.maintenanceLogs.findIndex(log => log.id === id);
+        if (index === -1) {
             return sendError(res, 404, 'Maintenance log not found');
         }
 
-        await docRef.update(updateData);
+        db.maintenanceLogs[index] = { ...db.maintenanceLogs[index], ...updateData };
         res.status(200).json({ success: true, message: 'Maintenance log updated successfully.' });
     } catch (error) {
         console.error('Error updating maintenance log:', error);
@@ -182,14 +137,12 @@ app.delete('/api/maintenance/:id', verifyToken, async (req, res) => {
     }
 
     try {
-        const docRef = db.collection('maintenanceLogs').doc(id);
-        const docSnap = await docRef.get();
-
-        if (!docSnap.exists) {
+        const index = db.maintenanceLogs.findIndex(log => log.id === id);
+        if (index === -1) {
             return sendError(res, 404, 'Maintenance log not found');
         }
 
-        await docRef.delete();
+        db.maintenanceLogs.splice(index, 1);
         res.status(200).json({ success: true, message: 'Maintenance log deleted successfully.' });
     } catch (error) {
         console.error('Error deleting maintenance log:', error);
@@ -208,9 +161,11 @@ app.post('/api/energy', verifyToken, async (req, res) => {
         return sendError(res, 400, 'Invalid usageValue. Must be a number');
     }
     if (!date || isNaN(Date.parse(date))) {
-        return sendError(res, 400, 'Invalid or missing date. Provide a valid date string (e.g., YYYY-MM-DD)');
+        return sendError(res, 400, 'Invalid or missing date.');
     }
+    
     const newLog = {
+        id: crypto.randomUUID(),
         room: roomId,
         usage: parseFloat(usageValue),
         unit: 'kWh',
@@ -218,9 +173,10 @@ app.post('/api/energy', verifyToken, async (req, res) => {
         receivedAt: new Date().toISOString(),
         isNew: true
     };
+    
     try {
-        const docRef = await db.collection('energyLogs').add(newLog);
-        res.status(201).json({ success: true, record: { id: docRef.id, ...newLog }, serverTime: newLog.receivedAt });
+        db.energyLogs.push(newLog);
+        res.status(201).json({ success: true, record: newLog, serverTime: newLog.receivedAt });
     } catch (error) {
         console.error('Error adding energy log:', error);
         return sendError(res, 500, 'Failed to add energy log', error.message);
@@ -237,7 +193,9 @@ app.post('/api/rooms', verifyToken, async (req, res) => {
     if (!roomType || typeof roomType !== 'string') {
         return sendError(res, 400, 'Invalid or missing roomType');
     }
+    
     const newRoom = {
+        id: crypto.randomUUID(),
         roomNumber,
         type: roomType,
         status: 'Available',
@@ -245,9 +203,10 @@ app.post('/api/rooms', verifyToken, async (req, res) => {
         receivedAt: new Date().toISOString(),
         isNew: true
     };
+    
     try {
-        const docRef = await db.collection('roomStatus').add(newRoom);
-        res.status(201).json({ success: true, record: { id: docRef.id, ...newRoom }, serverTime: newRoom.receivedAt });
+        db.roomStatus.push(newRoom);
+        res.status(201).json({ success: true, record: newRoom, serverTime: newRoom.receivedAt });
     } catch (error) {
         console.error('Error adding room status:', error);
         return sendError(res, 500, 'Failed to add room', error.message);
@@ -257,9 +216,8 @@ app.post('/api/rooms', verifyToken, async (req, res) => {
 // --- GET /api/visitors : returns all visitor logs ---
 app.get('/api/visitors', async (req, res) => {
     try {
-        const visitorDocs = await db.collection('visitorLogs').orderBy('entryTime', 'desc').get();
-        const visitorLogs = visitorDocs.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        res.json({ success: true, count: visitorLogs.length, data: visitorLogs });
+        const logs = [...db.visitorLogs].sort((a,b) => new Date(b.entryTime) - new Date(a.entryTime));
+        res.json({ success: true, count: logs.length, data: logs });
     } catch (e) {
         console.error('Error fetching visitors:', e);
         return sendError(res, 500, 'Failed to fetch visitors', e.message);
@@ -278,6 +236,7 @@ app.post('/api/visitors', verifyToken, async (req, res) => {
     }
 
     const newVisitor = {
+        id: crypto.randomUUID(),
         name,
         purpose,
         entryTime: new Date().toISOString(),
@@ -285,8 +244,8 @@ app.post('/api/visitors', verifyToken, async (req, res) => {
     };
 
     try {
-        const docRef = await db.collection('visitorLogs').add(newVisitor);
-        res.status(201).json({ success: true, record: { id: docRef.id, ...newVisitor } });
+        db.visitorLogs.push(newVisitor);
+        res.status(201).json({ success: true, record: newVisitor });
     } catch (error) {
         console.error('Error adding visitor log:', error);
         return sendError(res, 500, 'Failed to add visitor log', error.message);

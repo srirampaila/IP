@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { db } from '../firebase';
+import { collection, onSnapshot, query, orderBy, updateDoc, doc } from 'firebase/firestore';
 
 interface MaintenanceLog {
     id: string;
@@ -21,26 +23,32 @@ const MaintenanceLogs = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [sortOption, setSortOption] = useState('latest');
 
-    useEffect(() => {
-        const fetchLogs = async () => {
-            try {
-                const response = await fetch('http://localhost:3001/api/updates');
-                const data = await response.json();
-                setLogs(data.maintenanceLogs || []);
-                setLoading(false);
-            } catch (error) {
-                console.error('Error fetching maintenance logs:', error);
-                setLoading(false);
-            }
-        };
+    // Auth logic
+    const userStr = localStorage.getItem('user');
+    const user = userStr ? JSON.parse(userStr) : null;
+    const isUser = user?.role === 'user';
+    const isAdmin = user?.role === 'admin';
 
-        fetchLogs();
-        const interval = setInterval(fetchLogs, 15000);
-        return () => clearInterval(interval);
+    useEffect(() => {
+        const q = query(collection(db, 'maintenanceLogs'), orderBy('timestamp', 'desc'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const fetchedLogs = snapshot.docs.map(doc => ({ ...doc.data() as MaintenanceLog, id: doc.id }));
+            setLogs(fetchedLogs);
+            setLoading(false);
+        }, (error) => {
+            console.error('Error fetching maintenance logs:', error);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
     }, []);
 
     const filteredLogs = useMemo(() => {
         let data = logs;
+
+        if (isUser) {
+            data = data.filter(item => item.room === user.roomId);
+        }
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
@@ -129,6 +137,7 @@ const MaintenanceLogs = () => {
                                                 <th>Priority</th>
                                                 <th>Status</th>
                                                 <th>Date</th>
+                                                {isAdmin && <th>Action</th>}
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -137,12 +146,30 @@ const MaintenanceLogs = () => {
                                             ) : filteredLogs.length > 0 ? (
                                                 filteredLogs.map((item, index) => (
                                                     <tr key={index}>
-                                                        <td>{item.id}</td>
+                                                        <td>{item.id.slice(0, 6).toUpperCase()}</td>
                                                         <td>{item.room}</td>
                                                         <td>{item.description}</td>
                                                         <td><span className={`badge ${item.priority === 'Urgent' ? 'bg-danger' : item.priority === 'High' ? 'bg-warning' : 'bg-info'}`}>{item.priority}</span></td>
-                                                        <td>{item.status}</td>
+                                                        <td>
+                                                            <span className={`badge ${item.status === 'Completed' ? 'bg-success' : item.status === 'In Progress' ? 'bg-warning text-dark' : item.status === 'Urgent' ? 'bg-danger' : 'bg-secondary'}`}>
+                                                                {item.status}
+                                                            </span>
+                                                        </td>
                                                         <td>{item.date}</td>
+                                                        {isAdmin && (
+                                                            <td>
+                                                                {item.status !== 'Completed' ? (
+                                                                    <button 
+                                                                        className="btn btn-sm btn-outline-success py-0"
+                                                                        onClick={() => updateDoc(doc(db, 'maintenanceLogs', item.id), { status: 'Completed' })}
+                                                                    >
+                                                                        Resolve
+                                                                    </button>
+                                                                ) : (
+                                                                    <span className="text-success small"><i className="bi bi-check-circle"></i> Resolved</span>
+                                                                )}
+                                                            </td>
+                                                        )}
                                                     </tr>
                                                 ))
                                             ) : (

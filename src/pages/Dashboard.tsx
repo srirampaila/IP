@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Tab, Tabs } from 'react-bootstrap';
+
+import { Tab, Tabs, Dropdown } from 'react-bootstrap';
+import { UserCircle } from 'lucide-react';
 import './Dashboard.css';
 import RoomDetailsForm from '../components/RoomDetailsForm';
 import EnergyUsageForm from '../components/EnergyUsageForm';
@@ -8,7 +10,8 @@ import MaintenanceRequestForm from '../components/MaintenanceRequestForm';
 import VisitorLogForm from '../components/VisitorLogForm';
 import SocialHub from '../components/social/SocialHub';
 
-const POLL_INTERVAL_MS = 15000; // 15 seconds
+import { db } from '../firebase';
+import { collection, onSnapshot, query, orderBy, updateDoc, doc } from 'firebase/firestore';
 
 interface MaintenanceLog {
     id: string;
@@ -54,8 +57,20 @@ interface LiveData {
     serverTime?: string;
 }
 
-const Dashboard = () => {
+interface DashboardProps {
+    defaultTab?: string;
+}
+
+const Dashboard = ({ defaultTab = 'maintenance' }: DashboardProps) => {
     const navigate = useNavigate();
+    
+    // Auth logic
+    const userStr = localStorage.getItem('user');
+    const user = userStr ? JSON.parse(userStr) : null;
+    const isAdmin = user?.role === 'admin';
+    const isUser = user?.role === 'user';
+
+    const [userProfile, setUserProfile] = useState<any>(null);
 
     const [liveData, setLiveData] = useState<LiveData>({
         maintenanceLogs: [],
@@ -66,72 +81,71 @@ const Dashboard = () => {
     });
 
     const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
-    const [latencyMs, setLatencyMs] = useState<number | null>(null);
-    const [countdown, setCountdown] = useState<number>(POLL_INTERVAL_MS / 1000);
-    const [isPolling, setIsPolling] = useState(false);
 
     // Filter/Sort State
-    const [category, setCategory] = useState<string>('maintenance');
+    const [category, setCategory] = useState<string>(defaultTab);
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [sortOption, setSortOption] = useState<string>('latest');
 
-    // Ref so fetchData can be called imperatively without recreating the interval
-    const lastSubmitTimeRef = useRef<number | null>(null);
-    const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const resetCountdown = useCallback(() => {
-        setCountdown(POLL_INTERVAL_MS / 1000);
-    }, []);
 
-    const fetchData = useCallback(async () => {
-        setIsPolling(true);
-        try {
-            const response = await fetch('http://localhost:3001/api/updates');
-            const data: LiveData = await response.json();
-            const now = Date.now();
+    // Firebase real-time listeners
+    useEffect(() => {
+        setLiveData(prev => ({ ...prev, systemStatus: 'Connected' }));
 
-            setLiveData(data);
-            setLastUpdatedAt(new Date(now));
-
-            // Compute latency if this fetch was triggered by a form submit
-            if (lastSubmitTimeRef.current !== null) {
-                setLatencyMs(now - lastSubmitTimeRef.current);
-                lastSubmitTimeRef.current = null;
-            }
-
-            resetCountdown();
-        } catch (error) {
-            console.error('Error fetching updates:', error);
-        } finally {
-            setIsPolling(false);
+        let unsubUser = () => {};
+        if (user?.id) {
+            unsubUser = onSnapshot(doc(db, 'users', user.id), snap => {
+                if (snap.exists()) setUserProfile({ id: snap.id, ...snap.data() });
+            });
         }
-    }, [resetCountdown]);
+        
+        const qMaint = query(collection(db, 'maintenanceLogs'), orderBy('receivedAt', 'desc'));
+        const unsubMaint = onSnapshot(qMaint, snap => {
+            setLiveData(prev => ({ ...prev, maintenanceLogs: snap.docs.map(d => ({id: d.id, ...d.data()}) as any) }));
+            setLastUpdatedAt(new Date());
+        });
 
-    // Polling interval
-    useEffect(() => {
-        fetchData();
-        const pollInterval = setInterval(fetchData, POLL_INTERVAL_MS);
-        return () => clearInterval(pollInterval);
-    }, [fetchData]);
+        const qEnergy = query(collection(db, 'energyLogs'), orderBy('receivedAt', 'desc'));
+        const unsubEnergy = onSnapshot(qEnergy, snap => {
+            setLiveData(prev => ({ ...prev, energyLogs: snap.docs.map(d => ({id: d.id, ...d.data()}) as any) }));
+            setLastUpdatedAt(new Date());
+        });
 
-    // Countdown timer (ticks every second)
-    useEffect(() => {
-        countdownRef.current = setInterval(() => {
-            setCountdown(prev => (prev > 1 ? prev - 1 : POLL_INTERVAL_MS / 1000));
-        }, 1000);
+        const qRooms = query(collection(db, 'roomStatus'), orderBy('receivedAt', 'desc'));
+        const unsubRooms = onSnapshot(qRooms, snap => {
+            setLiveData(prev => ({ ...prev, roomStatus: snap.docs.map(d => ({id: d.id, ...d.data()}) as any) }));
+            setLastUpdatedAt(new Date());
+        });
+
+        const qVisitors = query(collection(db, 'visitorLogs'), orderBy('entryTime', 'desc'));
+        const unsubVisitors = onSnapshot(qVisitors, snap => {
+            setLiveData(prev => ({ ...prev, visitorLogs: snap.docs.map(d => ({id: d.id, ...d.data()}) as any) }));
+            setLastUpdatedAt(new Date());
+        });
+
         return () => {
-            if (countdownRef.current) clearInterval(countdownRef.current);
+            unsubUser();
+            unsubMaint();
+            unsubEnergy();
+            unsubRooms();
+            unsubVisitors();
         };
     }, []);
 
-    // Called by forms after successful submission
-    const handleSubmitSuccess = useCallback((submittedAt: number) => {
-        lastSubmitTimeRef.current = submittedAt;
-        // Slight delay to let the server process, then immediately poll
-        setTimeout(() => fetchData(), 300);
-    }, [fetchData]);
+    const handleSubmitSuccess = (_submittedAt: number) => {
+        // No-op since Firebase handles UI updates instantly
+    };
 
     const handleLogout = () => navigate('/');
+
+    const handleResolve = async (id: string) => {
+        try {
+            await updateDoc(doc(db, 'maintenanceLogs', id), { status: 'Completed' });
+        } catch (error) {
+            console.error('Error resolving request:', error);
+        }
+    };
 
     // Filtering and Sorting Logic
     const filteredData = useMemo(() => {
@@ -140,6 +154,11 @@ const Dashboard = () => {
         else if (category === 'energy') data = liveData.energyLogs || [];
         else if (category === 'rooms') data = liveData.roomStatus || [];
         else if (category === 'visitors') data = liveData.visitorLogs || [];
+
+        // Apply RBAC filtering for users
+        if (isUser && (category === 'maintenance' || category === 'energy')) {
+            data = data.filter((item: any) => item.room === user.roomId);
+        }
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
@@ -190,7 +209,25 @@ const Dashboard = () => {
                                 <button className="btn btn-outline-light me-2" onClick={() => navigate('/maintenance')}>View Maintenance Logs</button>
                             </li>
                             <li className="nav-item">
-                                <button className="btn btn-outline-light" onClick={handleLogout}>Logout</button>
+                                <Dropdown align="end">
+                                    <Dropdown.Toggle variant="outline-light" id="dropdown-profile" className="d-flex align-items-center gap-2 px-3 py-2 border-0 shadow-none">
+                                        <UserCircle size={20} />
+                                        <span className="d-none d-md-inline fw-semibold">{userProfile?.fullName || 'My Profile'}</span>
+                                    </Dropdown.Toggle>
+                                    <Dropdown.Menu className="shadow border-0 mt-2" style={{ minWidth: '200px' }}>
+                                        <div className="px-3 py-2 mb-2 bg-light border-bottom">
+                                            <div className="fw-bold">{userProfile?.fullName || user?.name || 'Hello!'}</div>
+                                            <div className="small text-muted text-capitalize">{user?.role}</div>
+                                        </div>
+                                        <Dropdown.Item onClick={() => navigate('/profile')} className="d-flex align-items-center gap-2 py-2">
+                                            <UserCircle size={16} /> Edit Profile
+                                        </Dropdown.Item>
+                                        <Dropdown.Divider />
+                                        <Dropdown.Item onClick={handleLogout} className="text-danger d-flex align-items-center gap-2 py-2">
+                                            Logout
+                                        </Dropdown.Item>
+                                    </Dropdown.Menu>
+                                </Dropdown>
                             </li>
                         </ul>
                     </div>
@@ -221,29 +258,6 @@ const Dashboard = () => {
                             </span>
                         )}
 
-                        {/* Next refresh countdown */}
-                        <span className="text-muted small">
-                            <strong>Next refresh in:</strong>{' '}
-                            <span className={`fw-semibold ${countdown <= 3 ? 'text-warning' : 'text-primary'}`}>
-                                {countdown}s
-                            </span>
-                        </span>
-
-                        {/* Update latency */}
-                        {latencyMs !== null && (
-                            <span className="text-muted small latency-badge">
-                                ⚡ <strong>Last update latency:</strong>{' '}
-                                <span className="fw-semibold text-success">{latencyMs} ms</span>
-                            </span>
-                        )}
-
-                        {/* Polling spinner */}
-                        {isPolling && (
-                            <span className="text-muted small">
-                                <span className="spinner-border spinner-border-sm text-primary me-1" role="status" aria-hidden="true"></span>
-                                Fetching…
-                            </span>
-                        )}
                     </div>
                 </div>
 
@@ -288,14 +302,14 @@ const Dashboard = () => {
                                                     <table className="table table-hover mb-0">
                                                         <thead className="table-light">
                                                             <tr>
-                                                                <th>ID</th><th>Room</th><th>Description</th><th>Priority</th><th>Status</th><th>Date</th>
+                                                                <th>ID</th><th>Room</th><th>Description</th><th>Priority</th><th>Status</th><th>Date</th>{isAdmin && <th>Action</th>}
                                                             </tr>
                                                         </thead>
                                                         <tbody>
                                                             {filteredData.length > 0 ? (
                                                                 filteredData.map((item: any, index) => (
                                                                     <tr key={index} className={item.isNew ? 'row-flash' : ''}>
-                                                                        <td>{item.id}</td>
+                                                                        <td>{item.id.slice(0, 6).toUpperCase()}</td>
                                                                         <td>{item.room}</td>
                                                                         <td>{item.description}</td>
                                                                         <td><span className={`badge ${item.priority === 'Urgent' ? 'bg-danger' : item.priority === 'High' ? 'bg-warning' : 'bg-info'}`}>{item.priority}</span></td>
@@ -305,6 +319,19 @@ const Dashboard = () => {
                                                                             </span>
                                                                         </td>
                                                                         <td>{item.date}</td>
+                                                                        {isAdmin && (
+                                                                            <td>
+                                                                                {item.status !== 'Completed' && (
+                                                                                    <button 
+                                                                                        className="btn btn-sm btn-outline-success py-0"
+                                                                                        onClick={() => handleResolve(item.id)}
+                                                                                    >
+                                                                                        Resolve
+                                                                                    </button>
+                                                                                )}
+                                                                                {item.status === 'Completed' && <span className="text-success small"><i className="bi bi-check-circle"></i> Resolved</span>}
+                                                                            </td>
+                                                                        )}
                                                                     </tr>
                                                                 ))
                                                             ) : (
@@ -317,7 +344,7 @@ const Dashboard = () => {
                                         </div>
                                     </div>
                                     <div className="col-md-4">
-                                        <MaintenanceRequestForm onSubmitSuccess={handleSubmitSuccess} />
+                                        <MaintenanceRequestForm onSubmitSuccess={handleSubmitSuccess} userProfile={userProfile} />
                                     </div>
                                 </div>
                             </Tab>
@@ -377,12 +404,13 @@ const Dashboard = () => {
                                         </div>
                                     </div>
                                     <div className="col-md-4">
-                                        <EnergyUsageForm onSubmitSuccess={handleSubmitSuccess} />
+                                        <EnergyUsageForm onSubmitSuccess={handleSubmitSuccess} userProfile={userProfile} />
                                     </div>
                                 </div>
                             </Tab>
 
                             {/* ── Room Status Tab ── */}
+                            {isAdmin && (
                             <Tab eventKey="rooms" title="Room Status">
                                 <div className="row">
                                     <div className="col-md-8 mb-4">
@@ -445,8 +473,10 @@ const Dashboard = () => {
                                     </div>
                                 </div>
                             </Tab>
+                            )}
 
                             {/* ── Visitor Logs Tab ── */}
+                            {isAdmin && (
                             <Tab eventKey="visitors" title="Visitor Logs">
                                 <div className="row">
                                     <div className="col-md-8 mb-4">
@@ -503,6 +533,7 @@ const Dashboard = () => {
                                     </div>
                                 </div>
                             </Tab>
+                            )}
 
                             {/* ── Social Hub Tab ── */}
                             <Tab eventKey="social" title="Community Hub">

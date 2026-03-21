@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { db } from '../firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
 interface VisitorErrors {
     name?: string;
@@ -44,16 +46,11 @@ const VisitorLogForm = ({ onSubmitSuccess }: VisitorLogFormProps) => {
         setSubmitStatus('idle');
 
         try {
-            const response = await fetch('http://localhost:3001/api/visitors', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-demo-bypass': 'true'
-                },
-                body: JSON.stringify(formData)
+            await addDoc(collection(db, 'visitorLogs'), {
+                name: formData.name,
+                purpose: formData.purpose,
+                entryTime: new Date().toISOString()
             });
-
-            if (!response.ok) throw new Error('Server error');
 
             setSubmitStatus('success');
             setFormData({ name: '', purpose: '' });

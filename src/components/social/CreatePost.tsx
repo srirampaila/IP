@@ -5,13 +5,10 @@ import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { Image, Video, Globe, Lock, Search, X } from 'lucide-react';
 import './SocialHub.css';
 
-// MOCK USER for demonstration since we lack full Auth
-const CURRENT_USER = {
-    uid: 'demo_user_1',
-    displayName: 'Estate Manager'
-};
-
 const CreatePost = () => {
+    const userStr = localStorage.getItem('user');
+    const user = userStr ? JSON.parse(userStr) : { id: 'demo_user_1', name: 'Estate Manager' };
+    const CURRENT_USER = { uid: user.id, displayName: user.name };
     const [content, setContent] = useState('');
     const [visibility, setVisibility] = useState<'public' | 'private'>('public');
     const [mediaFile, setMediaFile] = useState<File | null>(null);

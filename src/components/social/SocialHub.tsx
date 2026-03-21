@@ -5,14 +5,13 @@ import CreatePost from './CreatePost';
 import PostCard from './PostCard';
 import './SocialHub.css';
 
-const CURRENT_USER = {
-    uid: 'demo_user_1',
-    displayName: 'Estate Manager'
-};
-
 const SocialHub = () => {
     const [posts, setPosts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const userStr = localStorage.getItem('user');
+    const user = userStr ? JSON.parse(userStr) : { id: 'demo_user_1', name: 'Estate Manager' };
+    const CURRENT_USER = { uid: user.id, displayName: user.name };
 
     useEffect(() => {
         // Query: Get all Public posts OR Private posts where the current user is either author or recipient

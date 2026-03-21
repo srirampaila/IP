@@ -1,6 +1,7 @@
 /* Login Page Styles */
 .login-container {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
@@ -8,7 +9,6 @@
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   padding: 1rem;
-  /* Prevent edge-to-edge on mobile */
 }
 
 .login-card {
@@ -22,13 +22,26 @@
   max-width: 400px;
   color: white;
   text-align: center;
+  transition: all 0.3s ease;
+}
+
+.login-main-title {
+  margin-bottom: 2.5rem;
+  font-size: 3rem;
+  font-weight: 800;
+  color: #ffffff;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  text-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  line-height: 1.2;
+  white-space: nowrap;
+  text-align: center;
 }
 
 .login-title {
   margin-bottom: 2rem;
-  font-size: 2rem;
-  font-weight: 700;
-  color: #fff;
+  font-size: 1.6rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -36,6 +49,52 @@
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+.role-toggle-container {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.4rem;
+  border-radius: 12px;
+}
+
+.role-toggle-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.8rem;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+}
+
+.role-toggle-btn:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.role-toggle-btn.active {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.role-icon {
+  opacity: 0.8;
+  transition: opacity 0.3s ease;
+}
+
+.role-toggle-btn.active .role-icon {
+  opacity: 1;
 }
 
 .input-group {
@@ -51,6 +110,19 @@
   font-weight: 500;
 }
 
+.input-icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: 1rem;
+  color: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
+
 .login-input {
   width: 100%;
   padding: 0.8rem 1rem;
@@ -63,14 +135,22 @@
   outline: none;
 }
 
+.login-input.with-icon {
+  padding-left: 3rem;
+}
+
 .login-input::placeholder {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .login-input:focus {
   background: rgba(255, 255, 255, 0.2);
   border-color: rgba(255, 255, 255, 0.8);
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+.login-input:focus + .input-icon {
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .error-message {
@@ -86,7 +166,6 @@
     opacity: 0;
     transform: translateY(-5px);
   }
-
   to {
     opacity: 1;
     transform: translateY(0);
@@ -103,16 +182,71 @@
   font-size: 1.1rem;
   font-weight: 700;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 52px;
 }
 
-.login-button:hover {
-  transform: translateY(-2px);
+.login-button:hover:not(:disabled) {
+  transform: scale(1.02) translateY(-2px);
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
-.login-button:active {
-  transform: translateY(0);
+.login-button:active:not(:disabled) {
+  transform: scale(0.98) translateY(0);
+}
+
+.login-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.toggle-container {
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+.toggle-text {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.9rem;
+}
+
+.toggle-button {
+  background: none;
+  border: none;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.9rem;
+  margin-left: 0.2rem;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.3s ease;
+}
+
+.toggle-button:hover:not(:disabled) {
+  text-decoration-color: white;
+}
+
+.toggle-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 @media (max-width: 480px) {

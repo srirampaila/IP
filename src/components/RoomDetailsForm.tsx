@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { db } from '../firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
 interface RoomErrors {
     roomNumber?: string;
@@ -48,16 +50,13 @@ const RoomDetailsForm = ({ onSubmitSuccess }: RoomDetailsFormProps) => {
         setSubmitStatus('idle');
 
         try {
-            const response = await fetch('http://localhost:3001/api/rooms', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-demo-bypass': 'true'
-                },
-                body: JSON.stringify({ roomNumber: formData.roomNumber, roomType: formData.roomType })
+            await addDoc(collection(db, 'roomStatus'), {
+                roomNumber: formData.roomNumber,
+                type: formData.roomType,
+                status: 'Available',
+                nextCleaning: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+                receivedAt: new Date().toISOString()
             });
-
-            if (!response.ok) throw new Error('Server error');
 
             setSubmitStatus('success');
             setFormData({ roomNumber: '', roomType: '', capacity: '' });
