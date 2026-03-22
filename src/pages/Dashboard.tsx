@@ -1,8 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import FeedbackForm from '../components/FeedbackForm';
+
+import AdminFeedbackView from '../components/AdminFeedbackView';
+
 import { Tab, Tabs, Dropdown } from 'react-bootstrap';
-import { UserCircle } from 'lucide-react';
+import { UserCircle, MessageSquare } from 'lucide-react';
 import './Dashboard.css';
 import RoomDetailsForm from '../components/RoomDetailsForm';
 import EnergyUsageForm from '../components/EnergyUsageForm';
@@ -141,9 +145,20 @@ const Dashboard = ({ defaultTab = 'maintenance' }: DashboardProps) => {
 
     const handleResolve = async (id: string) => {
         try {
-            await updateDoc(doc(db, 'maintenanceLogs', id), { status: 'Completed' });
+            await updateDoc(doc(db, 'maintenanceLogs', id), { status: 'Resolved' });
         } catch (error) {
             console.error('Error resolving request:', error);
+        }
+    };
+
+    const handleFeedbackSubmit = async (logId: string, rating: string, comments: string) => {
+        try {
+            await updateDoc(doc(db, 'maintenanceLogs', logId), {
+                feedback: { rating, comments }
+            });
+        } catch (error) {
+            console.error('Error submitting feedback:', error);
+            throw error; // Let the form handle the alert
         }
     };
 
@@ -261,6 +276,19 @@ const Dashboard = ({ defaultTab = 'maintenance' }: DashboardProps) => {
                     </div>
                 </div>
 
+                {/* User Notification Status Card for Resolved Maintenance Requests */}
+                {isUser && liveData.maintenanceLogs.some(log => log.room === user?.roomId && log.status === 'Resolved' && !(log as any).feedback) && (
+                    <div className="alert alert-success mt-3 mb-4 shadow-sm border-0 border-start border-5 border-success" role="alert">
+                        <div className="d-flex align-items-center">
+                            <i className="bi bi-check-circle-fill me-3 fs-3"></i>
+                            <div>
+                                <h5 className="alert-heading mb-1">Feedback Required</h5>
+                                <p className="mb-0">Your problem has been solved! Please check the resolution in the <strong>Maintenance Logs</strong>. If any issues remain, please raise a new request, or submit feedback to close the current one.</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Tabs for Content */}
                 <div className="row mt-4">
                     <div className="col-12">
@@ -308,20 +336,21 @@ const Dashboard = ({ defaultTab = 'maintenance' }: DashboardProps) => {
                                                         <tbody>
                                                             {filteredData.length > 0 ? (
                                                                 filteredData.map((item: any, index) => (
-                                                                    <tr key={index} className={item.isNew ? 'row-flash' : ''}>
+                                                                    <React.Fragment key={item.id || index}>
+                                                                    <tr className={item.isNew ? 'row-flash' : ''}>
                                                                         <td>{item.id.slice(0, 6).toUpperCase()}</td>
                                                                         <td>{item.room}</td>
                                                                         <td>{item.description}</td>
                                                                         <td><span className={`badge ${item.priority === 'Urgent' ? 'bg-danger' : item.priority === 'High' ? 'bg-warning' : 'bg-info'}`}>{item.priority}</span></td>
                                                                         <td>
-                                                                            <span className={`badge ${item.status === 'Completed' ? 'bg-success' : item.status === 'In Progress' ? 'bg-warning text-dark' : item.status === 'Urgent' ? 'bg-danger' : 'bg-secondary'}`}>
+                                                                            <span className={`badge ${(item.status === 'Resolved' || item.status === 'Completed') ? 'bg-success' : item.status === 'In Progress' ? 'bg-warning text-dark' : item.status === 'Urgent' ? 'bg-danger' : 'bg-secondary'}`}>
                                                                                 {item.status}
                                                                             </span>
                                                                         </td>
                                                                         <td>{item.date}</td>
                                                                         {isAdmin && (
                                                                             <td>
-                                                                                {item.status !== 'Completed' && (
+                                                                                {item.status !== 'Completed' && item.status !== 'Resolved' && (
                                                                                     <button 
                                                                                         className="btn btn-sm btn-outline-success py-0"
                                                                                         onClick={() => handleResolve(item.id)}
@@ -329,10 +358,29 @@ const Dashboard = ({ defaultTab = 'maintenance' }: DashboardProps) => {
                                                                                         Resolve
                                                                                     </button>
                                                                                 )}
-                                                                                {item.status === 'Completed' && <span className="text-success small"><i className="bi bi-check-circle"></i> Resolved</span>}
+                                                                                {(item.status === 'Completed' || item.status === 'Resolved') && <span className="text-success small"><i className="bi bi-check-circle"></i> Resolved</span>}
                                                                             </td>
                                                                         )}
                                                                     </tr>
+                                                                    {isUser && item.status === 'Resolved' && !item.feedback && (
+                                                                        <tr>
+                                                                            <td colSpan={isAdmin ? 7 : 6} className="p-0 border-0">
+                                                                                <div className="px-3 pb-2 pt-1 bg-light">
+                                                                                    <FeedbackForm logId={item.id} onSubmit={handleFeedbackSubmit} />
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                    {isUser && item.feedback && (
+                                                                        <tr>
+                                                                            <td colSpan={isAdmin ? 7 : 6} className="p-0 border-0">
+                                                                                <div className="px-3 pb-2 pt-1 bg-light text-success small">
+                                                                                    <i className="bi bi-check2-all me-1"></i> Feedback submitted: {item.feedback.rating}
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                    </React.Fragment>
                                                                 ))
                                                             ) : (
                                                                 <tr><td colSpan={6} className="text-center">No logs found</td></tr>
@@ -539,6 +587,13 @@ const Dashboard = ({ defaultTab = 'maintenance' }: DashboardProps) => {
                             <Tab eventKey="social" title="Community Hub">
                                 <SocialHub />
                             </Tab>
+
+                            {/* ── Admin Feedback Tab ── */}
+                            {isAdmin && (
+                            <Tab eventKey="feedback" title={<><MessageSquare size={16} className="me-2 mb-1" />User Feedback</>}>
+                                <AdminFeedbackView />
+                            </Tab>
+                            )}
                         </Tabs>
                     </div>
                 </div>
