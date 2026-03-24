@@ -2,19 +2,28 @@ import { useState, useRef, useEffect } from 'react';
 import { db, storage } from '../../firebase';
 import { collection, addDoc, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { Image, Video, Globe, Lock, Search, X } from 'lucide-react';
+import { Image, Video, Globe, Lock, Search, X, AlertCircle } from 'lucide-react';
 import './SocialHub.css';
 
 const CreatePost = () => {
+    // Better user fallback initialization from localStorage
     const userStr = localStorage.getItem('user');
-    const user = userStr ? JSON.parse(userStr) : { id: 'demo_user_1', name: 'Estate Manager' };
-    const CURRENT_USER = { uid: user.id, displayName: user.name };
+    const user = userStr ? JSON.parse(userStr) : null;
+    
+    // Explicit fallbacks for required properties to avoid Firestore throwing invalid data errors
+    const currentUserUid = user?.id || user?.uid || 'UnknownId';
+    const currentUserName = user?.name || user?.displayName || user?.email?.split('@')[0] || 'Unknown User';
+    const currentUserRoomId = user?.roomId || 'Unknown_Room';
+
     const [content, setContent] = useState('');
     const [visibility, setVisibility] = useState<'public' | 'private'>('public');
     const [mediaFile, setMediaFile] = useState<File | null>(null);
     const [mediaPreview, setMediaPreview] = useState<string | null>(null);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    // UI state for local errors
+    const [errorMsg, setErrorMsg] = useState('');
 
     // Private Search state
     const [searchQuery, setSearchQuery] = useState('');
@@ -29,6 +38,7 @@ const CreatePost = () => {
             const file = e.target.files[0];
             setMediaFile(file);
             setMediaPreview(URL.createObjectURL(file));
+            if (errorMsg) setErrorMsg(''); // clear error if any
         }
     };
 
@@ -46,37 +56,53 @@ const CreatePost = () => {
                 return;
             }
             try {
-                // In a real app, you'd use a better text search solution (Algolia/Typesense)
                 // Firestore doesn't support generic substring search easily
                 const q = query(
                     collection(db, 'users'),
-                    where('displayName', '>=', searchQuery),
-                    where('displayName', '<=', searchQuery + '\uf8ff')
+                    where('name', '>=', searchQuery),
+                    where('name', '<=', searchQuery + '\uf8ff')
                 );
                 const snapshot = await getDocs(q);
                 const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setSearchResults(users.filter(u => u.id !== CURRENT_USER.uid));
+                setSearchResults(users.filter(u => u.id !== currentUserUid));
             } catch (err) {
                 console.error("Error searching users", err);
             }
         };
         const debounceId = setTimeout(searchUsers, 500);
         return () => clearTimeout(debounceId);
-    }, [searchQuery]);
+    }, [searchQuery, currentUserUid]);
 
-    const handleSubmit = async () => {
-        if (!content && !mediaFile) return;
+    const handleSubmit = async (e?: React.MouseEvent | React.FormEvent) => {
+        if (e) e.preventDefault();
+        
+        // Clear old errors before starting
+        setErrorMsg('');
+
+        // 1. Data Validation Before Preparation Layer
+        if (!user) {
+            setErrorMsg('You must be fully logged in to post. Please refresh or log in again.');
+            return;
+        }
+
+        const trimmedContent = content.trim();
+        if (!trimmedContent && !mediaFile) {
+            setErrorMsg('Your post cannot be empty. Please enter text or an image.');
+            return;
+        }
+
         if (visibility === 'private' && !selectedRecipient) {
-            alert('Please select a recipient for your private message.');
+            setErrorMsg('Please select a valid recipient from the search for your private message.');
             return;
         }
 
         setIsSubmitting(true);
-        let mediaUrl = null;
-        let mediaType = null;
 
         try {
-            // 1. Upload Media if present
+            let mediaUrl = null;
+            let mediaType = null;
+
+            // 2. Upload Media if present
             if (mediaFile) {
                 const storageRef = ref(storage, `social_media/${Date.now()}_${mediaFile.name}`);
                 const uploadTask = uploadBytesResumable(storageRef, mediaFile);
@@ -98,30 +124,37 @@ const CreatePost = () => {
                 mediaType = mediaFile.type.startsWith('video/') ? 'video' : 'image';
             }
 
-            // 2. Save Post to Firestore
-            await addDoc(collection(db, 'posts'), {
-                authorId: CURRENT_USER.uid,
-                authorName: CURRENT_USER.displayName,
-                content,
-                mediaUrl,
-                mediaType,
+            // 3. Document Preparation (Ensuring all fields are strictly valid and devoid of undefined)
+            const docData = {
+                authorId: currentUserUid,
+                authorName: currentUserName,
+                roomId: currentUserRoomId,
+                content: trimmedContent,
+                mediaUrl: mediaUrl || null,
+                mediaType: mediaType || null,
                 type: visibility,
-                recipientId: visibility === 'private' ? selectedRecipient.id : null,
-                recipientName: visibility === 'private' ? selectedRecipient.displayName : null,
+                recipientId: visibility === 'private' && selectedRecipient?.id ? selectedRecipient.id : null,
+                recipientName: visibility === 'private' && selectedRecipient?.name ? selectedRecipient.name : null,
                 likesCount: 0,
                 timestamp: serverTimestamp()
-            });
+            };
 
-            // Reset Form
+            // Debugging Log
+            console.log('--- PREPARED POST FIREBASE PAYLOAD ---', docData);
+
+            // 4. Save Post to Firestore Database (Await success to enforce button lockout)
+            await addDoc(collection(db, 'posts'), docData);
+
+            // 5. Successful Post Action (Optimistic Input Clearance)
             setContent('');
             clearMedia();
             setVisibility('public');
             setSelectedRecipient(null);
             setSearchQuery('');
             setUploadProgress(0);
-        } catch (error) {
-            console.error('Error posting:', error);
-            alert('Failed to post. Check console.');
+        } catch (error: any) {
+            console.error('Error preparing or saving post:', error);
+            setErrorMsg(error?.message || 'Failed to prepare post. Check console details.');
         } finally {
             setIsSubmitting(false);
         }
@@ -129,16 +162,28 @@ const CreatePost = () => {
 
     return (
         <div className="create-post-card">
+            
+            {/* Visual Error Container */}
+            {errorMsg && (
+                <div className="alert alert-danger d-flex align-items-center py-2 px-3 mb-3 border-0" role="alert" style={{ fontSize: '0.85rem' }}>
+                    <AlertCircle size={16} className="me-2 flex-shrink-0" />
+                    <div>{errorMsg}</div>
+                </div>
+            )}
+
             <div className="d-flex gap-3 mb-3">
                 <div className="post-avatar shadow-sm">
-                    {CURRENT_USER.displayName.charAt(0)}
+                    {currentUserName.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-grow-1">
                     <textarea
                         className="create-post-textarea"
                         placeholder="Share an update with the community..."
                         value={content}
-                        onChange={(e) => setContent(e.target.value)}
+                        onChange={(e) => {
+                            setContent(e.target.value);
+                            if (errorMsg) setErrorMsg(''); // Clear error on edit
+                        }}
                         disabled={isSubmitting}
                     />
                 </div>
@@ -167,7 +212,11 @@ const CreatePost = () => {
             <div className="d-flex align-items-center gap-2 mt-3 p-2 bg-light rounded-3 position-relative">
                 <button
                     className={`btn btn-sm ${visibility === 'public' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setVisibility('public')}
+                    onClick={() => {
+                        setVisibility('public');
+                        if (errorMsg) setErrorMsg('');
+                    }}
+                    disabled={isSubmitting}
                 >
                     <Globe size={14} className="me-1" /> Public
                 </button>
@@ -176,7 +225,9 @@ const CreatePost = () => {
                     onClick={() => {
                         setVisibility('private');
                         setSelectedRecipient(null);
+                        if (errorMsg) setErrorMsg('');
                     }}
+                    disabled={isSubmitting}
                 >
                     <Lock size={14} className="me-1" /> Private DM
                 </button>
@@ -191,13 +242,17 @@ const CreatePost = () => {
                                     className="form-control border-0 shadow-none form-control-sm"
                                     placeholder="Search resident..."
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onChange={(e) => {
+                                        setSearchQuery(e.target.value);
+                                        if (errorMsg) setErrorMsg('');
+                                    }}
+                                    disabled={isSubmitting}
                                 />
                             </div>
                         ) : (
                             <div className="d-flex align-items-center bg-dark text-white rounded px-3 py-1" style={{ fontSize: '0.9rem', width: 'fit-content' }}>
-                                Sending to: {selectedRecipient.displayName}
-                                <button className="btn btn-link p-0 text-white ms-2" onClick={() => setSelectedRecipient(null)}>
+                                Sending to: {selectedRecipient.name || selectedRecipient.displayName}
+                                <button className="btn btn-link p-0 text-white ms-2" onClick={() => setSelectedRecipient(null)} disabled={isSubmitting}>
                                     <X size={14} />
                                 </button>
                             </div>
@@ -214,12 +269,13 @@ const CreatePost = () => {
                                             setSelectedRecipient(user);
                                             setSearchQuery('');
                                             setSearchResults([]);
+                                            if (errorMsg) setErrorMsg('');
                                         }}
                                     >
                                         <div className="post-avatar" style={{ width: '24px', height: '24px', fontSize: '0.7rem' }}>
-                                            {user.displayName.charAt(0)}
+                                            {(user.name || user.displayName || '?').charAt(0).toUpperCase()}
                                         </div>
-                                        {user.displayName}
+                                        {user.name || user.displayName}
                                     </div>
                                 ))}
                             </div>
@@ -241,6 +297,7 @@ const CreatePost = () => {
                         className="d-none"
                         ref={fileInputRef}
                         onChange={handleMediaChange}
+                        disabled={isSubmitting}
                     />
                     <button className="action-btn" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>
                         <Image size={18} /> Photo

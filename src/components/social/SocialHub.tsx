@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, query, orderBy, onSnapshot, or, where } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import CreatePost from './CreatePost';
 import PostCard from './PostCard';
 import './SocialHub.css';
@@ -10,28 +10,40 @@ const SocialHub = () => {
     const [loading, setLoading] = useState(true);
 
     const userStr = localStorage.getItem('user');
-    const user = userStr ? JSON.parse(userStr) : { id: 'demo_user_1', name: 'Estate Manager' };
-    const CURRENT_USER = { uid: user.id, displayName: user.name };
+    // Ensure we don't crash if user is null by relying on fallbacks safely
+    const user = userStr ? JSON.parse(userStr) : null;
 
     useEffect(() => {
-        // Query: Get all Public posts OR Private posts where the current user is either author or recipient
+        // Unified Feed: Fetch all posts globally for everyone in the Community Hub
         const q = query(
             collection(db, 'posts'),
-            or(
-                where('type', '==', 'public'),
-                where('recipientId', '==', CURRENT_USER.uid),
-                where('authorId', '==', CURRENT_USER.uid)
-            ),
             orderBy('timestamp', 'desc')
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // 4. Debugging Check as requested by user
+            console.log("Fetched posts for user:", snapshot.docs.map(doc => doc.data()));
+
+            const fetchedPosts = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { 
+                    id: doc.id, 
+                    ...data,
+                    // Fallback timestamp guarantees optimistic local writes appear instantly
+                    timestamp: data.timestamp || { seconds: Math.floor(Date.now() / 1000) }
+                };
+            });
+            
+            // 2. Local State Management: manual sort guarantees new messages appear at the top
+            fetchedPosts.sort((a: any, b: any) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+
+            // 3. Update React State to sync UI without refresh
             setPosts(fetchedPosts);
             setLoading(false);
         }, (error) => {
             console.error("Error fetching feed: ", error);
             setLoading(false);
+            // Optionally, we could set an error state here if requested.
         });
 
         return () => unsubscribe();

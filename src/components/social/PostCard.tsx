@@ -77,8 +77,17 @@ const PostCard = ({ post }: { post: any }) => {
         }
     };
 
-    // Format date securely
-    const timeAgo = post.timestamp ? new Date(post.timestamp.toDate()).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Just now';
+    // Format date securely, accounting for local fallback timestamps lacking .toDate()
+    const timeAgo = (() => {
+        if (!post.timestamp) return 'Just now';
+        if (typeof post.timestamp.toDate === 'function') {
+            return post.timestamp.toDate().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+        if (post.timestamp.seconds) {
+            return new Date(post.timestamp.seconds * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+        return 'Just now';
+    })();
 
     return (
         <div className="post-card">
